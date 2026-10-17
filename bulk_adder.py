@@ -1,33 +1,39 @@
 import os
-import csv
-import random
 import asyncio
-import base64
+import random
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
+from telethon.tl.functions.channels import GetParticipantsRequest
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.messages import AddChatUserRequest
+from telethon.tl.types import ChannelParticipantsSearch
 from telethon.errors import FloodWaitError, UserPrivacyRestrictedError, PeerFloodError, UserAlreadyParticipantError
 
+# ================= CONFIGURATION =================
 API_ID = 34964566
 API_HASH = '0e1adb6860c9e1a4269c87b22ecfd46a'
-SESSION_STRING = os.environ.get('TG_SESSION')
-# Aapka naya group
+SESSION_STRING = os.environ.get('TG_SESSION') # Render se aayega
+
+# Source group (Jahan se members nikalne hain)
+SOURCE_GROUP = 'https://t.me/NIFTYSENSEX_12' 
+
+# Target group (Jahan members add karne hain)
 TARGET_GROUP = 'https://t.me/wingomaxhelpline' 
 
-# Render se aane wala CSV data
-CSV_DATA_B64 = os.environ.get('CSV_DATA_B64') 
-CSV_FILE = 'users.csv'
+# Delay (Seconds) - Account ban se bachne ke liye
+MIN_DELAY = 45
+MAX_DELAY = 90
+# =================================================
 
-# Render free tier ke liye dummy web server
+# Render free tier ke liye dummy server
 def run_dummy_server():
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"Bulk Adder is Running...")
+            self.wfile.write(b"Combined Scraper + Adder is Running...")
     port = int(os.environ.get('PORT', 10000))
     server = HTTPServer(('0.0.0.0', port), Handler)
     server.serve_forever()
@@ -35,64 +41,82 @@ def run_dummy_server():
 async def main():
     print("Script start ho rahi hai...")
     
-    # Base64 data ko CSV file me convert karna
-    if CSV_DATA_B64:
-        with open(CSV_FILE, "wb") as f:
-            f.write(base64.b64decode(CSV_DATA_B64))
-        print("CSV file load ho gayi.")
-    
     async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as client:
         try:
-            group = await client.get_entity(TARGET_GROUP)
+            print(f"Source Group Connect ho raha hai: {SOURCE_GROUP}")
+            source_entity = await client.get_entity(SOURCE_GROUP)
+            
+            print(f"Target Group Connect ho raha hai: {TARGET_GROUP}")
+            target_entity = await client.get_entity(TARGET_GROUP)
+            
         except Exception as e:
-            print(f"Group nahi mila (Kya aap admin hain?): {e}")
+            print(f"Group nahi mila: {e}")
             return
 
-        usernames = []
-        try:
-            with open(CSV_FILE, 'r', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if row and not row[0].startswith('username'): 
-                        usernames.append(row[0].strip()) 
-        except FileNotFoundError:
-            print(f"Error: {CSV_FILE} nahi mili. Env variable check karein.")
-            return
-
-        print(f"Total {len(usernames)} users add karne hain.")
-
-        for index, user in enumerate(usernames, 1):
+        print("Members nikalna aur add karna shuru...")
+        
+        offset = 0
+        limit = 100
+        total_added = 0
+        total_checked = 0
+        
+        while True:
             try:
-                user_entity = await client.get_input_entity(user)
-                
-                # Group me add karna
-                if hasattr(group, 'megagroup') or hasattr(group, 'broadcast'):
-                    await client(InviteToChannelRequest(channel=group, users=[user_entity]))
-                else:
-                    await client(AddChatUserRequest(chat_id=group.id, user_id=user_entity, fwd_limit=10))
-                
-                print(f"[{index}/{len(usernames)}] Success: {user} added.")
-                
-                # Telegram block se bachne ke liye 40 se 90 second ka gap
-                delay = random.randint(40, 90)
-                print(f"Waiting for {delay} seconds...")
-                await asyncio.sleep(delay)
-
+                # Source group se members fetch karein
+                participants = await client(GetParticipantsRequest(
+                    channel=source_entity, 
+                    filter=ChannelParticipantsSearch(''),
+                    offset=offset, 
+                    limit=limit, 
+                    hash=0
+                ))
             except FloodWaitError as e:
-                print(f"Flood wait! Telegram ne {e.seconds} seconds ka wait karne ko kaha hai.")
-                await asyncio.sleep(e.seconds)
-            except UserPrivacyRestrictedError:
-                print(f"[{index}] Skipped: {user} ki privacy ne add nahi hone diya.")
-            except PeerFloodError:
-                print("Bohot zyada requests! Account block ho sakta hai. Aaj ke liye ruk jayein.")
+                print(f"Flood wait (Fetch): {e.seconds} seconds...")
+                await asyncio.sleep(e.seconds + 5)
+                continue
+                
+            if not participants.users:
+                print("Source group ke saare members check ho gaye.")
                 break
-            except UserAlreadyParticipantError:
-                print(f"[{index}] Skipped: {user} pehle se group me hai.")
-            except Exception as e:
-                print(f"[{index}] Error adding {user}: {e}")
+                
+            for user in participants.users:
+                if not user.username:
+                    continue # Skip agar username nahi hai
+                    
+                total_checked += 1
+                print(f"[{total_checked}] Processing user: {user.username}")
+                
+                try:
+                    # Target group me add karein
+                    if hasattr(target_entity, 'megagroup') or hasattr(target_entity, 'broadcast'):
+                        await client(InviteToChannelRequest(channel=target_entity, users=[user]))
+                    else:
+                        await client(AddChatUserRequest(chat_id=target_entity.id, user_id=user, fwd_limit=10))
+                        
+                    total_added += 1
+                    print(f"✅ Success: {user.username} added. (Total Added: {total_added})")
+                    
+                    # Telegram block se bachne ke liye delay
+                    delay = random.randint(MIN_DELAY, MAX_DELAY)
+                    print(f"⏳ Waiting for {delay} seconds...\n")
+                    await asyncio.sleep(delay)
+                    
+                except FloodWaitError as e:
+                    print(f"⏳ Flood wait (Add): {e.seconds} seconds...")
+                    await asyncio.sleep(e.seconds + 5)
+                except UserPrivacyRestrictedError:
+                    print(f"❌ Skipped: {user.username} ki privacy settings add nahi hone deti.")
+                except PeerFloodError:
+                    print("🚫 PeerFloodError: Bohot zyada requests! Account block ho sakta hai. Script rok rahi hai.")
+                    return # Script exit
+                except UserAlreadyParticipantError:
+                    print(f"⏩ Skipped: {user.username} pehle se target group me hai.")
+                except Exception as e:
+                    print(f"⚠️ Error adding {user.username}: {e}")
+            
+            offset += len(participants.users)
+            print(f"--- Agle {limit} members fetch kar rahe hain (Total Checked: {total_checked}) ---")
 
 if __name__ == '__main__':
-    # Web server start karein (Render ko zinda rakhne ke liye)
     threading.Thread(target=run_dummy_server, daemon=True).start()
-    # Main scraper/add script start karein
     asyncio.run(main())
