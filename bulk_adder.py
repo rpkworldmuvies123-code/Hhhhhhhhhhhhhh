@@ -15,8 +15,10 @@ API_HASH = '0e1adb6860c9e1a4269c87b22ecfd46a'
 SESSION_STRING = os.environ.get('TG_SESSION')
 SOURCE_GROUP = 'https://t.me/NIFTYSENSEX_12'
 TARGET_GROUP = 'https://t.me/wingomaxhelpline'
-MIN_DELAY = 45
-MAX_DELAY = 90
+
+# Speed badha di hai (10 se 20 second)
+MIN_DELAY = 10
+MAX_DELAY = 20
 
 def run_scraper():
     async def main():
@@ -36,7 +38,7 @@ def run_scraper():
                     target_entity = await client.get_entity(TARGET_GROUP)
                     print(f"4. Target Group connect: {TARGET_GROUP}", flush=True)
                 except Exception as e:
-                    print(f"ERROR: Group connect nahi ho paya. Kya aap dono group ke member/admin hain? Details: {e}", flush=True)
+                    print(f"ERROR: Group connect nahi ho paya. Details: {e}", flush=True)
                     return
 
                 offset = 0
@@ -73,17 +75,21 @@ def run_scraper():
                             await client(InviteToChannelRequest(channel=target_entity, users=[user]))
                             total_added += 1
                             print(f"✅ Added: {user.username} (Total: {total_added})", flush=True)
+                            
+                            # Naya delay 10 se 20 sec
                             delay = random.randint(MIN_DELAY, MAX_DELAY)
                             print(f"⏳ Wait {delay} sec...\n", flush=True)
                             await asyncio.sleep(delay)
+                            
                         except FloodWaitError as e:
                             print(f"⏳ Flood wait (add): {e.seconds} sec...", flush=True)
                             await asyncio.sleep(e.seconds + 5)
                         except UserPrivacyRestrictedError:
                             print(f"❌ Skipped: {user.username} (Privacy restricted)", flush=True)
                         except PeerFloodError:
-                            print("🚫 PeerFloodError: Account ban ho sakta hai. Ruk rahe hain.", flush=True)
-                            return
+                            print("🚫 PeerFloodError: Bohot zyada requests! Account ban ho sakta hai. 1 minute ruk rahe hain...", flush=True)
+                            await asyncio.sleep(60) # 1 min ruk kar wapas try karega
+                            continue 
                         except UserAlreadyParticipantError:
                             print(f"⏩ Skipped: {user.username} (Already in group)", flush=True)
                         except Exception as e:
@@ -92,7 +98,7 @@ def run_scraper():
                     offset += len(participants.users)
             print("Script khatam.", flush=True)
         except Exception as e:
-            print(f"ERROR: TelegramClient connect nahi ho paya. Session expire ho sakta hai. Details: {e}", flush=True)
+            print(f"ERROR: TelegramClient connect nahi ho paya. Details: {e}", flush=True)
 
     try:
         asyncio.run(main())
@@ -106,8 +112,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/html')
         self.end_headers()
-        self.wfile.write(b"<h1>Trigger aaya! Ab Render ke Logs tab me jayein aur dekhein.</h1>")
-        # Background me scraper start karega
+        self.wfile.write(b"<h1>Speed badha di gayi hai (10-20 sec). Ab Logs check karein.</h1>")
         threading.Thread(target=run_scraper, daemon=True).start()
 
 def run_server():
