@@ -20,80 +20,99 @@ MAX_DELAY = 90
 
 def run_scraper():
     async def main():
-        print("Script start ho rahi hai...")
-        async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as client:
-            try:
-                source_entity = await client.get_entity(SOURCE_GROUP)
-                target_entity = await client.get_entity(TARGET_GROUP)
-                print("Dono groups connect ho gaye.")
-            except Exception as e:
-                print(f"Group connect error: {e}")
-                return
-
-            offset = 0
-            limit = 100
-            total_added = 0
-            total_checked = 0
-
-            while True:
+        print("1. Script start ho rahi hai...", flush=True)
+        if not SESSION_STRING:
+            print("ERROR: TG_SESSION environment variable nahi mila!", flush=True)
+            return
+            
+        try:
+            async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as client:
+                print("2. Telegram se connect ho gaya.", flush=True)
+                
                 try:
-                    participants = await client(GetParticipantsRequest(
-                        channel=source_entity, filter=ChannelParticipantsSearch(''),
-                        offset=offset, limit=limit, hash=0
-                    ))
-                except FloodWaitError as e:
-                    print(f"Flood wait (fetch): {e.seconds} sec...")
-                    await asyncio.sleep(e.seconds + 5)
-                    continue
+                    source_entity = await client.get_entity(SOURCE_GROUP)
+                    print(f"3. Source Group connect: {SOURCE_GROUP}", flush=True)
+                    
+                    target_entity = await client.get_entity(TARGET_GROUP)
+                    print(f"4. Target Group connect: {TARGET_GROUP}", flush=True)
+                except Exception as e:
+                    print(f"ERROR: Group connect nahi ho paya. Kya aap dono group ke member/admin hain? Details: {e}", flush=True)
+                    return
 
-                if not participants.users:
-                    print("Saare members check ho gaye.")
-                    break
+                offset = 0
+                limit = 100
+                total_added = 0
+                total_checked = 0
 
-                for user in participants.users:
-                    if not user.username:
-                        continue
-                    total_checked += 1
-                    print(f"[{total_checked}] Processing: {user.username}")
-
+                while True:
+                    print(f"5. Members fetch kar rahe hain (Offset: {offset})...", flush=True)
                     try:
-                        await client(InviteToChannelRequest(channel=target_entity, users=[user]))
-                        total_added += 1
-                        print(f"✅ Added: {user.username} (Total: {total_added})")
-                        delay = random.randint(MIN_DELAY, MAX_DELAY)
-                        print(f"⏳ Wait {delay} sec...\n")
-                        await asyncio.sleep(delay)
+                        participants = await client(GetParticipantsRequest(
+                            channel=source_entity, filter=ChannelParticipantsSearch(''),
+                            offset=offset, limit=limit, hash=0
+                        ))
                     except FloodWaitError as e:
-                        print(f"⏳ Flood wait (add): {e.seconds} sec...")
+                        print(f"Flood wait (fetch): {e.seconds} sec...", flush=True)
                         await asyncio.sleep(e.seconds + 5)
-                    except UserPrivacyRestrictedError:
-                        print(f"❌ Skipped: {user.username} (Privacy restricted)")
-                    except PeerFloodError:
-                        print("🚫 PeerFloodError: Account ban ho sakta hai. Ruk rahe hain.")
-                        return
-                    except UserAlreadyParticipantError:
-                        print(f"⏩ Skipped: {user.username} (Already in group)")
+                        continue
                     except Exception as e:
-                        print(f"⚠️ Error: {e}")
-                offset += len(participants.users)
-        print("Script khatam.")
+                        print(f"ERROR fetch karte waqt: {e}", flush=True)
+                        break
+
+                    if not participants.users:
+                        print("6. Saare members check ho gaye.", flush=True)
+                        break
+
+                    for user in participants.users:
+                        if not user.username:
+                            continue
+                        total_checked += 1
+                        print(f"[{total_checked}] Processing: {user.username}", flush=True)
+
+                        try:
+                            await client(InviteToChannelRequest(channel=target_entity, users=[user]))
+                            total_added += 1
+                            print(f"✅ Added: {user.username} (Total: {total_added})", flush=True)
+                            delay = random.randint(MIN_DELAY, MAX_DELAY)
+                            print(f"⏳ Wait {delay} sec...\n", flush=True)
+                            await asyncio.sleep(delay)
+                        except FloodWaitError as e:
+                            print(f"⏳ Flood wait (add): {e.seconds} sec...", flush=True)
+                            await asyncio.sleep(e.seconds + 5)
+                        except UserPrivacyRestrictedError:
+                            print(f"❌ Skipped: {user.username} (Privacy restricted)", flush=True)
+                        except PeerFloodError:
+                            print("🚫 PeerFloodError: Account ban ho sakta hai. Ruk rahe hain.", flush=True)
+                            return
+                        except UserAlreadyParticipantError:
+                            print(f"⏩ Skipped: {user.username} (Already in group)", flush=True)
+                        except Exception as e:
+                            print(f"⚠️ Error add karte waqt: {e}", flush=True)
+                    
+                    offset += len(participants.users)
+            print("Script khatam.", flush=True)
+        except Exception as e:
+            print(f"ERROR: TelegramClient connect nahi ho paya. Session expire ho sakta hai. Details: {e}", flush=True)
 
     try:
         asyncio.run(main())
     except Exception as e:
-        print("Main thread error:")
+        print("Main thread error:", flush=True)
         traceback.print_exc()
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        print("=> URL Open hua, trigger process start ho raha hai...", flush=True)
         self.send_response(200)
         self.send_header('Content-type', 'text/html')
         self.end_headers()
-        self.wfile.write(b"<h1>Trigger aaya! Ab Logs check karein.</h1>")
+        self.wfile.write(b"<h1>Trigger aaya! Ab Render ke Logs tab me jayein aur dekhein.</h1>")
+        # Background me scraper start karega
         threading.Thread(target=run_scraper, daemon=True).start()
 
 def run_server():
     port = int(os.environ.get('PORT', 10000))
+    print(f"Server start ho raha hai PORT: {port} par...", flush=True)
     server = HTTPServer(('0.0.0.0', port), Handler)
     server.serve_forever()
 
