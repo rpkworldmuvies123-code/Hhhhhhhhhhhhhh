@@ -6,6 +6,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
+from telethon.errors import FloodWaitError
 
 API_ID = 34964566
 API_HASH = '0e1adb6860c9e1a4269c87b22ecfd46a'
@@ -36,14 +37,33 @@ async def main():
                 writer = csv.writer(f)
                 writer.writerow(['username', 'user_id', 'access_hash'])
                 
-                # iter_participants use karein (offset ki zaroorat nahi)
-                async for user in client.iter_participants(group, aggressive=True):
-                    if user.username:
-                        writer.writerow([user.username, user.id, user.access_hash])
-                        total_count += 1
+                # Manual pagination loop
+                offset = 0
+                limit = 200
+                
+                while True:
+                    try:
+                        participants = await client.get_participants(
+                            group, limit=limit, offset=offset, aggressive=True
+                        )
+                    except FloodWaitError as e:
+                        print(f"Flood wait: {e.seconds} seconds ka wait karein...")
+                        await asyncio.sleep(e.seconds)
+                        continue
+                    
+                    if not participants:
+                        break
                         
-                        if total_count % 100 == 0:
-                            print(f"Abhi tak {total_count} members mil chuke hain...")
+                    for user in participants:
+                        if user.username:
+                            writer.writerow([user.username, user.id, user.access_hash])
+                            total_count += 1
+                    
+                    offset += limit
+                    print(f"Abhi tak {total_count} members mil chuke hain...")
+                    
+                    # Telegram block se bachne ke liye gap
+                    await asyncio.sleep(2)
             
             print(f"Success! Total {total_count} members ki details save ho gayi.")
             
