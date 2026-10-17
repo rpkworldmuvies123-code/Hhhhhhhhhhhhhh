@@ -2,12 +2,11 @@ import os
 import asyncio
 import random
 import threading
-import base64
+import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 from telethon.tl.functions.channels import GetParticipantsRequest, InviteToChannelRequest
-from telethon.tl.functions.messages import AddChatUserRequest
 from telethon.tl.types import ChannelParticipantsSearch
 from telethon.errors import FloodWaitError, UserPrivacyRestrictedError, PeerFloodError, UserAlreadyParticipantError
 
@@ -19,23 +18,16 @@ TARGET_GROUP = 'https://t.me/wingomaxhelpline'
 MIN_DELAY = 45
 MAX_DELAY = 90
 
-# Global flag taaki script baar-baar na chale
-is_running = False
-
 def run_scraper():
-    global is_running
-    if is_running:
-        return
-    is_running = True
-
     async def main():
         print("Script start ho rahi hai...")
         async with TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH) as client:
             try:
                 source_entity = await client.get_entity(SOURCE_GROUP)
                 target_entity = await client.get_entity(TARGET_GROUP)
+                print("Dono groups connect ho gaye.")
             except Exception as e:
-                print(f"Group nahi mila: {e}")
+                print(f"Group connect error: {e}")
                 return
 
             offset = 0
@@ -50,7 +42,7 @@ def run_scraper():
                         offset=offset, limit=limit, hash=0
                     ))
                 except FloodWaitError as e:
-                    print(f"Flood wait: {e.seconds} sec...")
+                    print(f"Flood wait (fetch): {e.seconds} sec...")
                     await asyncio.sleep(e.seconds + 5)
                     continue
 
@@ -72,30 +64,32 @@ def run_scraper():
                         print(f"⏳ Wait {delay} sec...\n")
                         await asyncio.sleep(delay)
                     except FloodWaitError as e:
-                        print(f"⏳ Flood wait: {e.seconds} sec...")
+                        print(f"⏳ Flood wait (add): {e.seconds} sec...")
                         await asyncio.sleep(e.seconds + 5)
                     except UserPrivacyRestrictedError:
-                        print(f"❌ Skipped: Privacy restricted.")
+                        print(f"❌ Skipped: {user.username} (Privacy restricted)")
                     except PeerFloodError:
-                        print("🚫 PeerFloodError: Account ban ho sakta hai. Stopping.")
+                        print("🚫 PeerFloodError: Account ban ho sakta hai. Ruk rahe hain.")
                         return
                     except UserAlreadyParticipantError:
-                        print(f"⏩ Skipped: Already in group.")
+                        print(f"⏩ Skipped: {user.username} (Already in group)")
                     except Exception as e:
                         print(f"⚠️ Error: {e}")
                 offset += len(participants.users)
-        print("Script khatam ho gayi.")
+        print("Script khatam.")
 
-    asyncio.run(main())
-    is_running = False
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print("Main thread error:")
+        traceback.print_exc()
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/html')
         self.end_headers()
-        self.wfile.write(b"<h1>Script Start Ho Gayi! Logs check karein.</h1>")
-        # Jab UptimeRobot URL open karega, tab script start hogi
+        self.wfile.write(b"<h1>Trigger aaya! Ab Logs check karein.</h1>")
         threading.Thread(target=run_scraper, daemon=True).start()
 
 def run_server():
