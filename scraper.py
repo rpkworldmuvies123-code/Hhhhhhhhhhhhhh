@@ -36,34 +36,23 @@ async def main():
                 writer = csv.writer(f)
                 writer.writerow(['username', 'user_id', 'access_hash'])
                 
-                offset = 0
-                limit = 200
-                
-                while True:
-                    participants = await client.get_participants(group, limit=limit, offset=offset, aggressive=True)
-                    if not participants:
-                        break
+                # iter_participants use karein (offset ki zaroorat nahi)
+                async for user in client.iter_participants(group, aggressive=True):
+                    if user.username:
+                        writer.writerow([user.username, user.id, user.access_hash])
+                        total_count += 1
                         
-                    for user in participants:
-                        if user.username:
-                            writer.writerow([user.username, user.id, user.access_hash])
-                            total_count += 1
-                    
-                    offset += limit
-                    print(f"Abhi tak {total_count} members mil chuke hain...")
-                    await asyncio.sleep(2)
+                        if total_count % 100 == 0:
+                            print(f"Abhi tak {total_count} members mil chuke hain...")
             
             print(f"Success! Total {total_count} members ki details save ho gayi.")
             
             with open(filename, "rb") as file:
                 encoded_string = base64.b64encode(file.read()).decode('utf-8')
                 print("\n\n--- START OF CSV DATA ---")
-                
-                # Data ko 2000 character ke chhote chunks me print karega
                 chunk_size = 2000
                 for i in range(0, len(encoded_string), chunk_size):
                     print(encoded_string[i:i+chunk_size])
-                    
                 print("--- END OF CSV DATA ---")
             
         except Exception as e:
