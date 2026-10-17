@@ -6,6 +6,8 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
+from telethon.tl.functions.channels import GetParticipantsRequest
+from telethon.tl.types import ChannelParticipantsSearch
 from telethon.errors import FloodWaitError
 
 API_ID = 34964566
@@ -42,23 +44,28 @@ async def main():
                 
                 while True:
                     try:
-                        participants = await client.get_participants(
-                            group, limit=limit, offset=offset, aggressive=True
-                        )
+                        # Sahi tarika: GetParticipantsRequest use karein
+                        participants = await client(GetParticipantsRequest(
+                            channel=group,
+                            filter=ChannelParticipantsSearch(''),
+                            offset=offset,
+                            limit=limit,
+                            hash=0
+                        ))
                     except FloodWaitError as e:
                         print(f"Flood wait: {e.seconds} seconds ka wait karein...")
-                        await asyncio.sleep(e.seconds)
+                        await asyncio.sleep(e.seconds + 5)
                         continue
                     
-                    if not participants:
+                    if not participants.users:
                         break
                         
-                    for user in participants:
+                    for user in participants.users:
                         if user.username:
                             writer.writerow([user.username, user.id, user.access_hash])
                             total_count += 1
                     
-                    offset += limit
+                    offset += len(participants.users)
                     print(f"Abhi tak {total_count} members mil chuke hain...")
                     
                     await asyncio.sleep(2)
