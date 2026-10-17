@@ -37,7 +37,6 @@ async def main():
                 writer = csv.writer(f)
                 writer.writerow(['username', 'user_id', 'access_hash'])
                 
-                # Manual pagination loop
                 offset = 0
                 limit = 200
                 
@@ -62,7 +61,6 @@ async def main():
                     offset += limit
                     print(f"Abhi tak {total_count} members mil chuke hain...")
                     
-                    # Telegram block se bachne ke liye gap
                     await asyncio.sleep(2)
             
             print(f"Success! Total {total_count} members ki details save ho gayi.")
